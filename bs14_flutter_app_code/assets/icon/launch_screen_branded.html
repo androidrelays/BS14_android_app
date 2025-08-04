@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>BS14 Launch Screen Icon with Branding</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background: #f0f0f0;
+        }
+        .canvas-container {
+            text-align: center;
+            margin: 20px 0;
+        }
+        canvas {
+            border: 2px solid #333;
+            background: white;
+        }
+        .controls {
+            margin: 20px 0;
+            text-align: center;
+        }
+        button {
+            background: #2563eb;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            margin: 5px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        button:hover {
+            background: #1e40af;
+        }
+        .preview {
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+            margin: 20px 0;
+        }
+        .preview-item {
+            text-align: center;
+        }
+        .preview-canvas {
+            border: 1px solid #ccc;
+            background: #2563eb;
+        }
+    </style>
+</head>
+<body>
+    <h1>BS14 Branded Launch Screen Icon</h1>
+    <p>Professional launch screen with "BS14" and "By Relport, Inc." branding</p>
+    
+    <div class="canvas-container">
+        <canvas id="mainCanvas" width="512" height="512"></canvas>
+    </div>
+    
+    <div class="controls">
+        <button onclick="generateIcon()">Generate Branded Launch Icon</button>
+        <button onclick="downloadIcon()">Download Launch Icon</button>
+    </div>
+    
+    <div class="preview">
+        <div class="preview-item">
+            <h3>Launch Screen Preview</h3>
+            <canvas id="previewCanvas" width="200" height="200" class="preview-canvas"></canvas>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('mainCanvas');
+        const ctx = canvas.getContext('2d');
+        const previewCanvas = document.getElementById('previewCanvas');
+        const previewCtx = previewCanvas.getContext('2d');
+
+        function generateIcon() {
+            // Clear canvas with blue background
+            ctx.fillStyle = '#2563eb';
+            ctx.fillRect(0, 0, 512, 512);
+            
+            // Add subtle gradient background
+            const gradient = ctx.createLinearGradient(0, 0, 0, 512);
+            gradient.addColorStop(0, '#3b82f6');
+            gradient.addColorStop(1, '#1e40af');
+            ctx.fillStyle = gradient;
+            ctx.fillRect(0, 0, 512, 512);
+            
+            // Main title "BS14" - large and prominent
+            ctx.fillStyle = '#ffffff';
+            ctx.font = 'bold 140px Arial';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            
+            // Add text shadow for depth
+            ctx.shadowColor = 'rgba(0,0,0,0.5)';
+            ctx.shadowBlur = 8;
+            ctx.shadowOffsetX = 4;
+            ctx.shadowOffsetY = 4;
+            
+            // Draw main title positioned slightly above center
+            ctx.fillText('BS14', 256, 220);
+            
+            // Reset shadow for subtitle
+            ctx.shadowColor = 'rgba(0,0,0,0.3)';
+            ctx.shadowBlur = 4;
+            ctx.shadowOffsetX = 2;
+            ctx.shadowOffsetY = 2;
+            
+            // Subtitle "By Relport, Inc." - smaller but clear
+            ctx.fillStyle = '#e5e7eb';
+            ctx.font = 'normal 32px Arial';
+            ctx.fillText('By Relport, Inc.', 256, 320);
+            
+            // Reset shadow
+            ctx.shadowColor = 'transparent';
+            ctx.shadowBlur = 0;
+            ctx.shadowOffsetX = 0;
+            ctx.shadowOffsetY = 0;
+            
+            // Add decorative line above and below
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            // Line above BS14
+            ctx.moveTo(156, 160);
+            ctx.lineTo(356, 160);
+            // Line below "By Relport, Inc."
+            ctx.moveTo(156, 360);
+            ctx.lineTo(356, 360);
+            ctx.stroke();
+            
+            // Add subtle border around entire icon
+            ctx.strokeStyle = '#1e40af';
+            ctx.lineWidth = 8;
+            ctx.strokeRect(4, 4, 504, 504);
+            
+            updatePreview();
+        }
+        
+        function updatePreview() {
+            // Clear preview with blue background
+            previewCtx.fillStyle = '#2563eb';
+            previewCtx.fillRect(0, 0, 200, 200);
+            
+            // Draw scaled version of main icon
+            previewCtx.drawImage(canvas, 0, 0, 512, 512, 20, 20, 160, 160);
+        }
+        
+        function downloadIcon() {
+            const link = document.createElement('a');
+            link.download = 'bs14_launch_screen_branded.png';
+            link.href = canvas.toDataURL();
+            link.click();
+        }
+        
+        // Generate initial icon
+        generateIcon();
+    </script>
+</body>
+</html>

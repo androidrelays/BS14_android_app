@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>BS14 Launch Screen Icon Generator</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background: #f0f0f0;
+        }
+        .canvas-container {
+            text-align: center;
+            margin: 20px 0;
+        }
+        canvas {
+            border: 2px solid #333;
+            background: white;
+        }
+        .controls {
+            margin: 20px 0;
+            text-align: center;
+        }
+        button {
+            background: #2563eb;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            margin: 5px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        button:hover {
+            background: #1e40af;
+        }
+        .preview {
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+            margin: 20px 0;
+        }
+        .preview-item {
+            text-align: center;
+        }
+        .preview-canvas {
+            border: 1px solid #ccc;
+            background: #2563eb;
+        }
+    </style>
+</head>
+<body>
+    <h1>BS14 Launch Screen Icon Generator</h1>
+    <p>This will generate a large, bold "BS14" icon perfect for the launch screen</p>
+    
+    <div class="canvas-container">
+        <canvas id="mainCanvas" width="512" height="512"></canvas>
+    </div>
+    
+    <div class="controls">
+        <button onclick="generateIcon()">Generate BS14 Launch Icon</button>
+        <button onclick="downloadIcon()">Download Icon</button>
+    </div>
+    
+    <div class="preview">
+        <div class="preview-item">
+            <h3>Launch Screen Preview</h3>
+            <canvas id="previewCanvas" width="200" height="200" class="preview-canvas"></canvas>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('mainCanvas');
+        const ctx = canvas.getContext('2d');
+        const previewCanvas = document.getElementById('previewCanvas');
+        const previewCtx = previewCanvas.getContext('2d');
+
+        function generateIcon() {
+            // Clear canvas
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(0, 0, 512, 512);
+            
+            // Add blue background with rounded corners
+            ctx.fillStyle = '#2563eb';
+            ctx.beginPath();
+            ctx.roundRect(20, 20, 472, 472, 40);
+            ctx.fill();
+            
+            // Add white text "BS14" - large and bold
+            ctx.fillStyle = '#ffffff';
+            ctx.font = 'bold 120px Arial';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            
+            // Add text shadow for depth
+            ctx.shadowColor = 'rgba(0,0,0,0.3)';
+            ctx.shadowBlur = 8;
+            ctx.shadowOffsetX = 4;
+            ctx.shadowOffsetY = 4;
+            
+            ctx.fillText('BS14', 256, 256);
+            
+            // Reset shadow
+            ctx.shadowColor = 'transparent';
+            ctx.shadowBlur = 0;
+            ctx.shadowOffsetX = 0;
+            ctx.shadowOffsetY = 0;
+            
+            // Add subtle border
+            ctx.strokeStyle = '#1e40af';
+            ctx.lineWidth = 4;
+            ctx.beginPath();
+            ctx.roundRect(20, 20, 472, 472, 40);
+            ctx.stroke();
+            
+            updatePreview();
+        }
+        
+        function updatePreview() {
+            // Clear preview
+            previewCtx.fillStyle = '#2563eb';
+            previewCtx.fillRect(0, 0, 200, 200);
+            
+            // Draw scaled version of main icon
+            previewCtx.drawImage(canvas, 0, 0, 512, 512, 20, 20, 160, 160);
+        }
+        
+        function downloadIcon() {
+            const link = document.createElement('a');
+            link.download = 'bs14_launch_icon.png';
+            link.href = canvas.toDataURL();
+            link.click();
+        }
+        
+        // Add roundRect polyfill for older browsers
+        if (!CanvasRenderingContext2D.prototype.roundRect) {
+            CanvasRenderingContext2D.prototype.roundRect = function(x, y, width, height, radius) {
+                this.moveTo(x + radius, y);
+                this.lineTo(x + width - radius, y);
+                this.arcTo(x + width, y, x + width, y + radius, radius);
+                this.lineTo(x + width, y + height - radius);
+                this.arcTo(x + width, y + height, x + width - radius, y + height, radius);
+                this.lineTo(x + radius, y + height);
+                this.arcTo(x, y + height, x, y + height - radius, radius);
+                this.lineTo(x, y + radius);
+                this.arcTo(x, y, x + radius, y, radius);
+                this.closePath();
+            };
+        }
+        
+        // Generate initial icon
+        generateIcon();
+    </script>
+</body>
+</html>

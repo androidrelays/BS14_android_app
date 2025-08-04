@@ -1,0 +1,147 @@
+import 'package:flutter/material.dart';
+
+void main() {
+  runApp(const MyApp());
+}
+
+class MyApp extends StatelessWidget {
+  const MyApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      title: 'Breaker Control',
+      theme: ThemeData(primarySwatch: Colors.blue),
+      home: const BreakerControlScreen(),
+    );
+  }
+}
+
+class BreakerControlScreen extends StatefulWidget {
+  const BreakerControlScreen({super.key});
+
+  @override
+  State<BreakerControlScreen> createState() => _BreakerControlScreenState();
+}
+
+class _BreakerControlScreenState extends State<BreakerControlScreen> {
+  bool switchToggled = true;
+  bool breakerOpen = true;
+  bool portraitMode = true;
+
+  void setBreakerState(bool open) {
+    setState(() {
+      breakerOpen = open;
+    });
+  }
+
+  void rotateScreen() {
+    setState(() {
+      portraitMode = !portraitMode;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final Color openColor = Colors.green.shade700;
+    final Color openInactive = Colors.green.shade900;
+    final Color closeColor = Colors.red.shade700;
+    final Color closeInactive = Colors.red.shade900;
+    final Color bgColor = breakerOpen ? openColor : closeColor;
+
+    Widget content = Center(
+      child: Container(
+        padding: const EdgeInsets.all(20),
+        color: bgColor,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Switch container
+            Container(
+              width: 200,
+              height: 300,
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: Colors.yellow,
+                border: Border.all(width: 5, color: Colors.black),
+              ),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Text("UP", style: TextStyle(fontSize: 44, color: Colors.black)),
+                  const SizedBox(height: 20),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Text("69", style: TextStyle(fontSize: 44, color: Colors.black)),
+                      const SizedBox(width: 35),
+                      Switch(
+                        value: switchToggled,
+                        onChanged: (val) {
+                          setState(() {
+                            switchToggled = val;
+                            if (!switchToggled) breakerOpen = true;
+                          });
+                        },
+                        activeColor: Colors.green,
+                        inactiveThumbColor: Colors.grey,
+                        inactiveTrackColor: Colors.grey.shade400,
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 20),
+                  const Text("DOWN", style: TextStyle(fontSize: 44, color: Colors.black)),
+                ],
+              ),
+            ),
+            const SizedBox(height: 20),
+            // Button row
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: breakerOpen ? openColor : openInactive,
+                    minimumSize: const Size(180, 90),
+                  ),
+                  onPressed: () => setBreakerState(true),
+                  child: const Text("Open", style: TextStyle(fontSize: 32, color: Colors.black)),
+                ),
+                const SizedBox(width: 20),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: breakerOpen ? closeInactive : closeColor,
+                    minimumSize: const Size(180, 90),
+                  ),
+                  onPressed: switchToggled ? () => setBreakerState(false) : null,
+                  child: const Text("Close", style: TextStyle(fontSize: 32, color: Colors.black)),
+                ),
+              ],
+            ),
+            const SizedBox(height: 20),
+            // Rotate button
+            Align(
+              alignment: Alignment.topRight,
+              child: ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.black,
+                  minimumSize: const Size(135, 75),
+                ),
+                onPressed: rotateScreen,
+                child: const Text("Rotate", style: TextStyle(fontSize: 28, color: Colors.white)),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    // Simulate rotation by swapping width/height
+    return Scaffold(
+      backgroundColor: bgColor,
+      body: portraitMode
+          ? content
+          : RotatedBox(quarterTurns: 1, child: content),
+    );
+  }
+}

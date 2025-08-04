@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Large splash screen with big BS14 icon -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Blue background matching app theme -->
+    <item>
+        <color android:color="#2563eb" />
+    </item>
+
+    <!-- MASSIVE BS14 app icon that fills most of the screen -->
+    <item android:top="80dp" android:bottom="80dp" android:left="60dp" android:right="60dp">
+        <bitmap
+            android:gravity="fill"
+            android:src="@mipmap/launcher_icon"
+            android:scaleType="fitCenter" />
+    </item>
+</layer-list>

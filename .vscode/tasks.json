@@ -1,0 +1,13 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "Run Arduino Breaker App",
+			"type": "shell",
+			"command": "flutter run -d RFCR71BT5FA",
+			"group": "build",
+			"isBackground": false,
+			"problemMatcher": []
+		}
+	]
+}
