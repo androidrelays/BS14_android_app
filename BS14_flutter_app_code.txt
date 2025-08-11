@@ -29,6 +29,11 @@ class _BreakerControlScreenState extends State<BreakerControlScreen> {
   bool breakerOpen = true;
   bool portraitMode = true;
 
+  // BLE scan state
+  List<String> foundDevices = [];
+  String errorMessage = '';
+  bool scanning = false;
+
   void setBreakerState(bool open) {
     setState(() {
       breakerOpen = open;
@@ -38,6 +43,22 @@ class _BreakerControlScreenState extends State<BreakerControlScreen> {
   void rotateScreen() {
     setState(() {
       portraitMode = !portraitMode;
+    });
+  }
+
+  // Simulate BLE scan for demo
+  void startScan() async {
+    setState(() {
+      scanning = true;
+      foundDevices.clear();
+      errorMessage = '';
+    });
+    await Future.delayed(const Duration(seconds: 2));
+    // Simulate no devices found
+    setState(() {
+      scanning = false;
+      foundDevices = [];
+      // errorMessage = 'Scan error: Bluetooth not enabled'; // Uncomment to simulate error
     });
   }
 
@@ -56,7 +77,31 @@ class _BreakerControlScreenState extends State<BreakerControlScreen> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // Switch container
+            // BLE scan feedback
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.blue,
+                minimumSize: const Size(180, 60),
+              ),
+              onPressed: scanning ? null : startScan,
+              child: Text(scanning ? "Scanning..." : "Scan for Devices", style: const TextStyle(fontSize: 28, color: Colors.white)),
+            ),
+            if (errorMessage.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.all(8.0),
+                child: Text(errorMessage, style: const TextStyle(fontSize: 24, color: Colors.red)),
+              ),
+            if (!scanning && foundDevices.isEmpty && errorMessage.isEmpty)
+              Padding(
+                padding: const EdgeInsets.all(8.0),
+                child: Text("No devices found", style: const TextStyle(fontSize: 24, color: Colors.orange)),
+              ),
+            if (foundDevices.isNotEmpty)
+              Column(
+                children: foundDevices.map((d) => Text(d, style: const TextStyle(fontSize: 24))).toList(),
+              ),
+            const SizedBox(height: 20),
+            // ...existing code...
             Container(
               width: 200,
               height: 300,
@@ -95,7 +140,7 @@ class _BreakerControlScreenState extends State<BreakerControlScreen> {
               ),
             ),
             const SizedBox(height: 20),
-            // Button row
+            // ...existing code...
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
@@ -119,7 +164,7 @@ class _BreakerControlScreenState extends State<BreakerControlScreen> {
               ],
             ),
             const SizedBox(height: 20),
-            // Rotate button
+            // ...existing code...
             Align(
               alignment: Alignment.topRight,
               child: ElevatedButton(
