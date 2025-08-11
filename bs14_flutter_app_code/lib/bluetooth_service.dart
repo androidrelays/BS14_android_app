@@ -381,21 +381,22 @@ class BluetoothService {
   }
 
   // Send breaker command to Arduino
-  Future<void> sendBreakerCommand(bool open, bool switchUp) async {
+  Future<void> sendBreakerCommand(bool open, bool switchUp, bool locked) async {
     if (_connectedDevice == null || _writeCharacteristic == null) {
       debugPrint('No Bluetooth connection or characteristic');
       return;
     }
 
-    // Send command matching Arduino protocol: [breakerState, switchState]
+    // Send command matching Arduino protocol: [breakerState, switchState, lockState]
     // breakerState: 1 = Open, 0 = Close
     // switchState: 1 = Up, 0 = Down
-    List<int> command = [open ? 1 : 0, switchUp ? 1 : 0];
+    // lockState: 1 = Locked, 0 = Unlocked
+    List<int> command = [open ? 1 : 0, switchUp ? 1 : 0, locked ? 1 : 0];
 
     try {
       await _writeCharacteristic!.write(command);
       debugPrint(
-        'Sent command: Breaker=${open ? "OPEN" : "CLOSE"}, Switch=${switchUp ? "UP" : "DOWN"}',
+        'Sent command: Breaker=${open ? "OPEN" : "CLOSE"}, Switch=${switchUp ? "UP" : "DOWN"}, Lock=${locked ? "LOCKED" : "UNLOCKED"}',
       );
     } catch (e) {
       debugPrint('Error sending command: $e');
@@ -403,11 +404,12 @@ class BluetoothService {
   }
 
   // Store multiple callback functions for status updates
-  final List<Function(bool breakerOpen, bool switchUp)> _statusCallbacks = [];
+  final List<Function(bool breakerOpen, bool switchUp, bool? locked)>
+  _statusCallbacks = [];
 
   // Listen for status updates from Arduino
   Future<void> listenForStatusUpdates(
-    Function(bool breakerOpen, bool switchUp) onStatusReceived,
+    Function(bool breakerOpen, bool switchUp, bool? locked) onStatusReceived,
   ) async {
     // Add callback to the list (avoid duplicates)
     if (!_statusCallbacks.contains(onStatusReceived)) {
@@ -451,14 +453,18 @@ class BluetoothService {
           if (value.length >= 2) {
             bool breakerOpen = value[0] == 1;
             bool switchUp = value[1] == 1;
+            bool? locked;
+            if (value.length >= 3) {
+              locked = value[2] == 1;
+            }
             debugPrint(
-              '📨 Arduino Status Update: Breaker=${breakerOpen ? "OPEN" : "CLOSED"}, Switch=${switchUp ? "UP" : "DOWN"}',
+              '📨 Arduino Status Update: Breaker=${breakerOpen ? "OPEN" : "CLOSED"}, Switch=${switchUp ? "UP" : "DOWN"}, Lock=${locked == null ? "?" : (locked ? "LOCKED" : "UNLOCKED")}',
             );
 
             // Notify all registered callbacks
             for (var callback in _statusCallbacks) {
               try {
-                callback(breakerOpen, switchUp);
+                callback(breakerOpen, switchUp, locked);
               } catch (e) {
                 debugPrint('❌ Error in status callback: $e');
               }
