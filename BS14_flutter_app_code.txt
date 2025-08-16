@@ -28,6 +28,7 @@ class _BreakerControlScreenState extends State<BreakerControlScreen> {
   bool switchToggled = true;
   bool breakerOpen = true;
   bool portraitMode = true;
+  bool locked = false;
 
   // BLE scan state
   List<String> foundDevices = [];
@@ -43,6 +44,12 @@ class _BreakerControlScreenState extends State<BreakerControlScreen> {
   void rotateScreen() {
     setState(() {
       portraitMode = !portraitMode;
+    });
+  }
+
+  void toggleLock() {
+    setState(() {
+      locked = !locked;
     });
   }
 
@@ -69,6 +76,8 @@ class _BreakerControlScreenState extends State<BreakerControlScreen> {
     final Color closeColor = Colors.red.shade700;
     final Color closeInactive = Colors.red.shade900;
     final Color bgColor = breakerOpen ? openColor : closeColor;
+    final Color lockColor = locked ? Colors.blue.shade700 : Colors.grey.shade700;
+    final Color lockInactive = locked ? Colors.blue.shade900 : Colors.grey.shade900;
 
     Widget content = Center(
       child: Container(
@@ -160,6 +169,22 @@ class _BreakerControlScreenState extends State<BreakerControlScreen> {
                   ),
                   onPressed: switchToggled ? () => setBreakerState(false) : null,
                   child: const Text("Close", style: TextStyle(fontSize: 32, color: Colors.black)),
+                ),
+              ],
+            ),
+            const SizedBox(height: 20),
+            // Lock button
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: locked ? lockColor : lockInactive,
+                    minimumSize: const Size(180, 90),
+                  ),
+                  onPressed: toggleLock,
+                  icon: Icon(locked ? Icons.lock : Icons.lock_open, size: 40, color: Colors.white),
+                  label: Text(locked ? "Locked" : "Unlocked", style: const TextStyle(fontSize: 32, color: Colors.white)),
                 ),
               ],
             ),

@@ -1,7 +1,25 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart' as fbp;
+import 'dart:async';
 
 class BluetoothService {
+  Future<void> writeLockState(bool locked) async {
+    if (_lockCharacteristic != null && _connectedDevice != null) {
+      try {
+        await _lockCharacteristic!.write([locked ? 1 : 0]);
+        debugPrint(
+          'Wrote lock state to lockChar: ' + (locked ? 'LOCKED' : 'UNLOCKED'),
+        );
+      } catch (e) {
+        debugPrint('Error writing lock state: ' + e.toString());
+      }
+    }
+  }
+
+  // Stream controller for lock state notifications
+  final StreamController<bool> _lockStateController =
+      StreamController<bool>.broadcast();
+  Stream<bool> get lockStateStream => _lockStateController.stream;
   static final BluetoothService _instance = BluetoothService._internal();
   factory BluetoothService() => _instance;
   BluetoothService._internal() {
@@ -11,13 +29,15 @@ class BluetoothService {
   fbp.BluetoothDevice? _connectedDevice;
   fbp.BluetoothCharacteristic? _writeCharacteristic;
   fbp.BluetoothCharacteristic? _statusCharacteristic;
+  fbp.BluetoothCharacteristic? _lockCharacteristic;
   bool get isConnected =>
       _connectedDevice != null && _connectedDevice!.isConnected;
 
   // UUIDs matching Arduino sketch
   static const String serviceUUID = "12345678-1234-1234-1234-123456789abc";
   static const String commandCharUUID = "87654321-4321-4321-4321-cba987654321";
-  static const String statusCharUUID = "11111111-2222-3333-4444-555555555555";
+  static const String statusCharUUID = "11011111-2222-3333-4444-555555555555";
+  static const String lockCharUUID = "22222222-3333-4444-5555-666666666666";
 
   // Known Arduino MAC address for development (can be removed for production)
   static const String developmentArduinoMac = "A8:61:0A:39:64:00";
@@ -303,7 +323,6 @@ class BluetoothService {
           print(
             "✅ Found status characteristic with notify=${characteristic.properties.notify}!",
           );
-
           // Subscribe to notifications for status updates (with timeout)
           if (characteristic.properties.notify) {
             try {
@@ -324,8 +343,30 @@ class BluetoothService {
               print("⚠️ Could not setup status notifications: $e");
               // Continue anyway, we can still send commands
             }
-          } else {
-            print("⚠️ Status characteristic doesn't support notifications");
+          }
+        } else if (charUuidStr == lockCharUUID.toLowerCase()) {
+          _lockCharacteristic = characteristic;
+          print(
+            "✅ Found lock characteristic with notify=${characteristic.properties.notify}, write=${characteristic.properties.write}",
+          );
+          // Subscribe to lockChar notifications
+          if (characteristic.properties.notify) {
+            try {
+              print("🔔 Setting up lockChar notifications...");
+              await characteristic.setNotifyValue(true);
+              characteristic.onValueReceived.listen((value) {
+                if (value.isNotEmpty) {
+                  bool lockState = value[0] == 1;
+                  _lockStateController.add(lockState);
+                  print(
+                    "🔔 lockChar notification: lockState=${lockState ? 'LOCKED' : 'UNLOCKED'}",
+                  );
+                }
+              });
+              print("✅ Subscribed to lockChar notifications");
+            } catch (e) {
+              print("⚠️ Could not setup lockChar notifications: $e");
+            }
           }
         }
       }
@@ -350,6 +391,9 @@ class BluetoothService {
       );
       print(
         "  ✅ Status characteristic: ${_statusCharacteristic != null ? 'Ready' : 'Missing'}",
+      );
+      print(
+        "  ✅ Lock characteristic: ${_lockCharacteristic != null ? 'Ready' : 'Missing'}",
       );
 
       // Set up status listener if callbacks are already registered

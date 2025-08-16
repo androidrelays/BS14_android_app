@@ -31,6 +31,7 @@ class BreakerControlScreen extends StatefulWidget {
 
 class _BreakerControlScreenState extends State<BreakerControlScreen> {
   bool locked = false;
+  StreamSubscription<bool>? _lockCharSubscription;
   bool switchToggled = true;
   bool breakerOpen = true;
   final BluetoothService _bluetoothService = BluetoothService();
@@ -46,7 +47,7 @@ class _BreakerControlScreenState extends State<BreakerControlScreen> {
       DeviceOrientation.landscapeLeft,
       DeviceOrientation.landscapeRight,
     ]);
-    // Listen for status updates including lock state
+    // Listen for status updates (excluding lock state)
     _bluetoothService.listenForStatusUpdates((
       breakerOpen,
       switchUp,
@@ -55,7 +56,15 @@ class _BreakerControlScreenState extends State<BreakerControlScreen> {
       setState(() {
         this.breakerOpen = breakerOpen;
         switchToggled = switchUp;
-        if (lockState != null) locked = lockState;
+        // Do NOT update locked here; lock state is only updated from lockChar notifications
+      });
+    });
+    // Listen for lockChar notifications (two-way sync)
+    _lockCharSubscription = _bluetoothService.lockStateStream.listen((
+      lockState,
+    ) {
+      setState(() {
+        locked = lockState;
       });
     });
     _startConnectionMonitoring();
@@ -185,6 +194,7 @@ class _BreakerControlScreenState extends State<BreakerControlScreen> {
   @override
   void dispose() {
     _bluetoothService.disconnect();
+    _lockCharSubscription?.cancel();
     SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
     super.dispose();
   }
@@ -254,7 +264,55 @@ class _BreakerControlScreenState extends State<BreakerControlScreen> {
         );
         return;
       }
-      // ...existing code for device list...
+      // Show a dialog to select a device and connect
+      showDialog(
+        context: context,
+        builder: (BuildContext context) {
+          return SimpleDialog(
+            title: const Text('Select Device'),
+            children: devices.map((device) {
+              return SimpleDialogOption(
+                child: Text(
+                  device.platformName.isEmpty
+                      ? device.remoteId.toString()
+                      : device.platformName,
+                ),
+                onPressed: () async {
+                  Navigator.of(context).pop();
+                  bool connected = await _bluetoothService.connectToDevice(
+                    device,
+                  );
+                  setState(() {
+                    _isBluetoothConnected = connected;
+                    _connectionStatus = connected
+                        ? 'Connected'
+                        : 'Disconnected';
+                  });
+                  if (!connected && mounted) {
+                    showDialog(
+                      context: context,
+                      builder: (BuildContext context) {
+                        return AlertDialog(
+                          title: const Text('Connection Failed'),
+                          content: const Text(
+                            'Could not connect to the selected device.',
+                          ),
+                          actions: [
+                            TextButton(
+                              onPressed: () => Navigator.of(context).pop(),
+                              child: const Text('OK'),
+                            ),
+                          ],
+                        );
+                      },
+                    );
+                  }
+                },
+              );
+            }).toList(),
+          );
+        },
+      );
     } catch (e) {
       if (mounted) Navigator.of(context).pop();
       if (mounted) {
@@ -281,14 +339,15 @@ class _BreakerControlScreenState extends State<BreakerControlScreen> {
 
   Widget _buildLockButton() {
     return GestureDetector(
-      onLongPress: () {
+      onLongPress: () async {
+        final newLockState = !locked;
         setState(() {
-          locked = !locked;
+          locked = newLockState;
         });
-        // When locking, freeze breaker state and send command
-        if (locked) {
-          _sendArduinoCommand();
-        }
+        // Always write lock state to Arduino for two-way sync
+        await _bluetoothService.writeLockState(newLockState);
+        // Optionally, send breaker command if needed for your protocol
+        //_sendArduinoCommand();
       },
       child: Container(
         width: 70,
@@ -387,6 +446,8 @@ class _BreakerControlScreenState extends State<BreakerControlScreen> {
     final double switchScale = isPortrait ? 1.1 : 1.3;
     final double spacing = isPortrait ? 12 : 18;
     bool forceSwitchUp = locked && !breakerOpen;
+    // Disable switch if locked (regardless of breaker state)
+    final bool disableSwitch = locked;
     return Container(
       width: width,
       height: height,
@@ -420,7 +481,7 @@ class _BreakerControlScreenState extends State<BreakerControlScreen> {
                     children: [
                       Switch(
                         value: forceSwitchUp ? true : switchToggled,
-                        onChanged: forceSwitchUp
+                        onChanged: (disableSwitch || forceSwitchUp)
                             ? null
                             : (val) {
                                 setState(() {
@@ -437,7 +498,7 @@ class _BreakerControlScreenState extends State<BreakerControlScreen> {
                         inactiveThumbColor: Colors.grey,
                         inactiveTrackColor: Colors.grey[300],
                       ),
-                      if (forceSwitchUp)
+                      if (forceSwitchUp || disableSwitch)
                         Container(
                           width: 48,
                           height: 48,
