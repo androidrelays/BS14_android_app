@@ -3,15 +3,34 @@ import 'package:flutter_blue_plus/flutter_blue_plus.dart' as fbp;
 import 'dart:async';
 
 class BluetoothService {
+  // Send sense selection command to Arduino
+  Future<void> sendSenseCommand(List<int> packet) async {
+    if (_senseCharacteristic != null && _connectedDevice != null) {
+      try {
+        await _senseCharacteristic!.write(packet);
+        debugPrint('Sent sense selection packet: $packet');
+      } catch (e) {
+        debugPrint('Error sending sense selection: $e');
+      }
+    } else {
+      debugPrint('Sense characteristic not found or not connected');
+    }
+  }
+
   Future<void> writeLockState(bool locked) async {
     if (_lockCharacteristic != null && _connectedDevice != null) {
       try {
         await _lockCharacteristic!.write([locked ? 1 : 0]);
         debugPrint(
-          'Wrote lock state to lockChar: ' + (locked ? 'LOCKED' : 'UNLOCKED'),
+          'Wrote lock state to lockChar: ${locked ? 'LOCKED' : 'UNLOCKED'}',
         );
+
+        // Android fallback: Try to read status after writing
+        Future.delayed(const Duration(milliseconds: 100), () async {
+          await _tryReadStatusDirectly();
+        });
       } catch (e) {
-        debugPrint('Error writing lock state: ' + e.toString());
+        debugPrint('Error writing lock state: $e');
       }
     }
   }
@@ -20,16 +39,22 @@ class BluetoothService {
   final StreamController<bool> _lockStateController =
       StreamController<bool>.broadcast();
   Stream<bool> get lockStateStream => _lockStateController.stream;
+  final StreamController<int> _senseController =
+      StreamController<int>.broadcast();
+  Stream<int> get senseStream => _senseController.stream;
   static final BluetoothService _instance = BluetoothService._internal();
   factory BluetoothService() => _instance;
   BluetoothService._internal() {
-    print("🚀 BluetoothService initialized - Debug output is working!");
+    // Initialization without constant polling
   }
+
+  Timer? _statusPollTimer;
 
   fbp.BluetoothDevice? _connectedDevice;
   fbp.BluetoothCharacteristic? _writeCharacteristic;
   fbp.BluetoothCharacteristic? _statusCharacteristic;
   fbp.BluetoothCharacteristic? _lockCharacteristic;
+  fbp.BluetoothCharacteristic? _senseCharacteristic;
   bool get isConnected =>
       _connectedDevice != null && _connectedDevice!.isConnected;
 
@@ -38,6 +63,7 @@ class BluetoothService {
   static const String commandCharUUID = "87654321-4321-4321-4321-cba987654321";
   static const String statusCharUUID = "11011111-2222-3333-4444-555555555555";
   static const String lockCharUUID = "22222222-3333-4444-5555-666666666666";
+  static const String senseCharUUID = "33333333-4444-5555-6666-777777777777";
 
   // Known Arduino MAC address for development (can be removed for production)
   static const String developmentArduinoMac = "A8:61:0A:39:64:00";
@@ -323,51 +349,20 @@ class BluetoothService {
           print(
             "✅ Found status characteristic with notify=${characteristic.properties.notify}!",
           );
-          // Subscribe to notifications for status updates (with timeout)
-          if (characteristic.properties.notify) {
-            try {
-              print("🔔 Setting up status notifications...");
-              await characteristic
-                  .setNotifyValue(true)
-                  .timeout(
-                    const Duration(seconds: 5),
-                    onTimeout: () {
-                      print(
-                        "⚠️ Status notification setup timed out, continuing anyway...",
-                      );
-                      return false;
-                    },
-                  );
-              print("✅ Subscribed to status notifications");
-            } catch (e) {
-              print("⚠️ Could not setup status notifications: $e");
-              // Continue anyway, we can still send commands
-            }
-          }
+          // Notifications disabled to prevent spam - using direct reads instead
+          print("✅ Status characteristic ready (notifications disabled)");
         } else if (charUuidStr == lockCharUUID.toLowerCase()) {
           _lockCharacteristic = characteristic;
           print(
             "✅ Found lock characteristic with notify=${characteristic.properties.notify}, write=${characteristic.properties.write}",
           );
-          // Subscribe to lockChar notifications
-          if (characteristic.properties.notify) {
-            try {
-              print("🔔 Setting up lockChar notifications...");
-              await characteristic.setNotifyValue(true);
-              characteristic.onValueReceived.listen((value) {
-                if (value.isNotEmpty) {
-                  bool lockState = value[0] == 1;
-                  _lockStateController.add(lockState);
-                  print(
-                    "🔔 lockChar notification: lockState=${lockState ? 'LOCKED' : 'UNLOCKED'}",
-                  );
-                }
-              });
-              print("✅ Subscribed to lockChar notifications");
-            } catch (e) {
-              print("⚠️ Could not setup lockChar notifications: $e");
-            }
-          }
+          // Notifications disabled to prevent spam - using direct reads instead
+          print("✅ Found lock characteristic (notifications disabled)");
+        } else if (charUuidStr == senseCharUUID.toLowerCase()) {
+          _senseCharacteristic = characteristic;
+          print(
+            "✅ Found sense characteristic with write=${characteristic.properties.write}!",
+          );
         }
       }
 
@@ -402,7 +397,16 @@ class BluetoothService {
           "🎧 Setting up status listener now that connection is established...",
         );
         await _setupStatusListener();
+
+        // Perform initial sync since we have callbacks
+        await _performInitialSync();
+      } else {
+        print(
+          "⏳ No status callbacks registered yet - initial sync will happen when callbacks are registered",
+        );
       }
+      // Enable sense notifications
+      listenForSenseUpdates();
 
       return true;
     } catch (e) {
@@ -442,9 +446,153 @@ class BluetoothService {
       debugPrint(
         'Sent command: Breaker=${open ? "OPEN" : "CLOSE"}, Switch=${switchUp ? "UP" : "DOWN"}, Lock=${locked ? "LOCKED" : "UNLOCKED"}',
       );
+
+      // Android fallback: If notifications might not be working,
+      // try to read the status characteristic after a short delay
+      Future.delayed(const Duration(milliseconds: 100), () async {
+        await _tryReadStatusDirectly();
+      });
     } catch (e) {
       debugPrint('Error sending command: $e');
     }
+  }
+
+  // Perform initial sync sequence - extracted from connection establishment
+  Future<void> _performInitialSync() async {
+    print("🔄 Starting initial sync sequence...");
+
+    // First read after shorter delay - Arduino waits 800ms before writing
+    await Future.delayed(const Duration(milliseconds: 200));
+    await _tryReadStatusDirectly();
+
+    // Second read to catch Arduino's update (Arduino writes after 800ms)
+    await Future.delayed(const Duration(milliseconds: 700));
+    await _tryReadStatusDirectly();
+
+    // Third read to ensure we get the most current state
+    await Future.delayed(const Duration(milliseconds: 500));
+    await _tryReadStatusDirectly();
+    await _tryReadStatusDirectly();
+
+    print("🔄 Initial sync sequence completed");
+
+    // Also read the lock characteristic directly with multiple attempts
+    for (int attempt = 1; attempt <= 3; attempt++) {
+      if (_lockCharacteristic != null && _lockCharacteristic!.properties.read) {
+        try {
+          print(
+            "🔍 Reading lock characteristic directly (attempt $attempt)...",
+          );
+          List<int> lockValue = await _lockCharacteristic!.read();
+          print("🔒 Read lock data: $lockValue (length: ${lockValue.length})");
+
+          if (lockValue.isNotEmpty) {
+            bool lockState = lockValue[0] == 1;
+            print("🎯 Parsed lock state: ${lockState ? 'LOCKED' : 'UNLOCKED'}");
+            _lockStateController.add(lockState);
+            break; // Success, exit retry loop
+          } else {
+            print("⚠️ Lock data is empty (attempt $attempt)");
+          }
+        } catch (e) {
+          print("❌ Error reading lock characteristic (attempt $attempt): $e");
+          if (attempt == 3) {
+            print("🔒 Using default lock state: false");
+            _lockStateController.add(false);
+          }
+        }
+      }
+
+      // Small delay between attempts
+      if (attempt < 3) {
+        await Future.delayed(const Duration(milliseconds: 200));
+      }
+    }
+  }
+
+  // Android fallback: Try to read status directly if notifications aren't working
+  Future<void> _tryReadStatusDirectly() async {
+    print("🔍 Attempting to read status characteristic directly...");
+
+    if (_statusCharacteristic == null) {
+      print("❌ Status characteristic is null - cannot read");
+      return;
+    }
+
+    try {
+      if (_statusCharacteristic!.properties.read) {
+        print("📖 Reading status characteristic...");
+        List<int> value = await _statusCharacteristic!.read();
+        print("📊 Read status data: $value (length: ${value.length})");
+
+        if (value.length >= 2) {
+          bool breakerOpen = value[0] == 1;
+          bool switchUp = value[1] == 1;
+          bool? locked;
+          if (value.length >= 3) {
+            locked = value[2] == 1;
+          }
+
+          print(
+            "🎯 Parsed status: breaker=${breakerOpen ? 'OPEN' : 'CLOSED'}, switch=${switchUp ? 'UP' : 'DOWN'}, locked=${locked ?? 'unknown'}",
+          );
+
+          // Notify all registered callbacks
+          for (var callback in _statusCallbacks) {
+            try {
+              callback(breakerOpen, switchUp, locked);
+            } catch (e) {
+              print('❌ Error in direct read callback: $e');
+            }
+          }
+        } else {
+          print(
+            "⚠️ Status data too short (${value.length} bytes), expected at least 2",
+          );
+        }
+      } else {
+        print("❌ Status characteristic does not support read operations");
+      }
+    } catch (e) {
+      print("❌ Error reading status characteristic: $e");
+    }
+  }
+
+  // Force a status sync - useful for manual connection issues
+  Future<void> forceStatusSync() async {
+    print('🔄 Forcing status synchronization...');
+
+    // Try to read status characteristic
+    await _tryReadStatusDirectly();
+
+    // Also try to read lock characteristic
+    if (_lockCharacteristic != null && _lockCharacteristic!.properties.read) {
+      try {
+        print("🔍 Force reading lock characteristic...");
+        List<int> lockValue = await _lockCharacteristic!.read();
+        print(
+          "🔒 Force read lock data: $lockValue (length: ${lockValue.length})",
+        );
+
+        if (lockValue.isNotEmpty) {
+          bool lockState = lockValue[0] == 1;
+          print(
+            "🎯 Force parsed lock state: ${lockState ? 'LOCKED' : 'UNLOCKED'}",
+          );
+          _lockStateController.add(lockState);
+        } else {
+          print("⚠️ Force read lock data is empty");
+        }
+      } catch (e) {
+        print("❌ Error force reading lock characteristic: $e");
+      }
+    } else {
+      print(
+        "❌ Lock characteristic is null or does not support read operations in force sync",
+      );
+    }
+
+    print('🔄 Force status sync completed');
   }
 
   // Store multiple callback functions for status updates
@@ -466,7 +614,20 @@ class BluetoothService {
     // If we're already connected, set up the listener immediately
     if (_statusCharacteristic != null && _statusCallbacks.length == 1) {
       await _setupStatusListener();
+
+      // CRITICAL FIX: Trigger initial sync now that we have callbacks registered
+      print("🔄 Triggering initial sync now that callbacks are registered...");
+      await Future.delayed(
+        const Duration(milliseconds: 100),
+      ); // Small delay to ensure setup complete
+      await _performInitialSync();
     }
+  }
+
+  // Clear all status callbacks - useful for reconnections
+  void clearStatusCallbacks() {
+    _statusCallbacks.clear();
+    debugPrint('🗑️ All status callbacks cleared');
   }
 
   // Remove a status update callback
@@ -487,9 +648,29 @@ class BluetoothService {
     }
 
     try {
-      // Enable notifications on the status characteristic
+      debugPrint('🔔 Setting up status listener with Android compatibility...');
+
+      // Android-specific: Ensure notifications are properly enabled
       await _statusCharacteristic!.setNotifyValue(true);
-      debugPrint('✅ Enabled notifications on status characteristic');
+
+      // Android workaround: Small delay to ensure descriptor is written
+      await Future.delayed(const Duration(milliseconds: 200));
+
+      // Verify notification is actually enabled
+      bool isNotifying = _statusCharacteristic!.isNotifying;
+      debugPrint('📡 Status characteristic notification state: $isNotifying');
+
+      if (!isNotifying) {
+        debugPrint('⚠️ Retrying status notification setup...');
+        await _statusCharacteristic!.setNotifyValue(false);
+        await Future.delayed(const Duration(milliseconds: 100));
+        await _statusCharacteristic!.setNotifyValue(true);
+        await Future.delayed(const Duration(milliseconds: 200));
+        isNotifying = _statusCharacteristic!.isNotifying;
+        debugPrint(
+          '📡 Status characteristic notification state after retry: $isNotifying',
+        );
+      }
 
       // Listen for real-time updates from Arduino
       _statusCharacteristic!.onValueReceived.listen(
@@ -501,9 +682,6 @@ class BluetoothService {
             if (value.length >= 3) {
               locked = value[2] == 1;
             }
-            debugPrint(
-              '📨 Arduino Status Update: Breaker=${breakerOpen ? "OPEN" : "CLOSED"}, Switch=${switchUp ? "UP" : "DOWN"}, Lock=${locked == null ? "?" : (locked ? "LOCKED" : "UNLOCKED")}',
-            );
 
             // Notify all registered callbacks
             for (var callback in _statusCallbacks) {
@@ -513,8 +691,6 @@ class BluetoothService {
                 debugPrint('❌ Error in status callback: $e');
               }
             }
-          } else {
-            debugPrint('⚠️ Invalid status data length: ${value.length}');
           }
         },
         onError: (error) {
@@ -522,14 +698,30 @@ class BluetoothService {
         },
       );
 
-      debugPrint('🎧 Now listening for Arduino status updates...');
+      debugPrint('🎧 Status listener configured and active');
     } catch (e) {
       debugPrint('❌ Error setting up status notifications: $e');
     }
-  } // Disconnect from device
+  }
 
+  // Listen for sense selection updates from Arduino
+  void listenForSenseUpdates() {
+    if (_senseCharacteristic != null &&
+        _senseCharacteristic!.properties.notify) {
+      _senseCharacteristic!.setNotifyValue(true);
+      _senseCharacteristic!.value.listen((value) {
+        if (value.isNotEmpty) {
+          _senseController.add(value[0]);
+        }
+      });
+    }
+  }
+
+  // Disconnect from device
   Future<void> disconnect() async {
     try {
+      _statusPollTimer?.cancel();
+      _statusPollTimer = null;
       await _connectedDevice?.disconnect();
       debugPrint('Disconnected from Bluetooth device');
     } catch (e) {
@@ -538,6 +730,8 @@ class BluetoothService {
       _connectedDevice = null;
       _writeCharacteristic = null;
       _statusCharacteristic = null;
+      _lockCharacteristic = null;
+      _senseCharacteristic = null;
       _statusCallbacks.clear(); // Clear all callbacks
     }
   }
